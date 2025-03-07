@@ -96,13 +96,15 @@ contract DexPair is ERC20, ReentrancyGuard {
         } else {
             //s=(L1-L0)*T/L0 => Liquidity(shares)=userAmount*totalShares/L0
             liquidity = Math.min(
-                (amountA * totalSupply) / balanceA,
-                (amountB * totalSupply) / balanceB
+                (amountA * totalSupply) / reserveA,
+                (amountB * totalSupply) / reserveB
             );
         }
 
         if (liquidity <= 0) revert DexPair__LiquidityIsNotEnough();
         _mint(to, liquidity);
+        s_reserveA = balanceA; // 更新为添加流动性后的余额
+        s_reserveB = balanceB;
         emit SharesMinted(to, liquidity);
         _update();
     }
@@ -158,23 +160,40 @@ contract DexPair is ERC20, ReentrancyGuard {
         uint256 amountOut,
         address to
     ) external nonReentrant returns (uint256) {
-        //现在有了amountOut，现在要做的就是算出转账给的地址
         (uint256 reserveA, uint256 reserveB) = getReserve();
         uint256 balanceA = IERC20(s_tokenA).balanceOf(address(this));
         uint256 balanceB = IERC20(s_tokenB).balanceOf(address(this));
+
+        uint256 amountIn;
         if (balanceA > reserveA) {
-            // User sent in tokenA, so swap out tokenB
-            //IERC20(s_tokenB).transfer(to, amountOut);
+            amountIn = balanceA - reserveA;
+            uint256 amountInWithFee = (amountIn * 997) / 1000; // 扣除 0.3% 手续费
+            uint256 amountOutCalculated = (reserveB * amountInWithFee) /
+                (reserveA + amountInWithFee);
+            require(
+                amountOut <= amountOutCalculated,
+                "Insufficient output amount"
+            );
             _safeTransfer(s_tokenB, to, amountOut);
+            s_reserveA = reserveA + amountInWithFee;
+            s_reserveB = reserveB - amountOut;
         } else if (balanceB > reserveB) {
-            // User sent in tokenB, so swap out tokenA
-            //IERC20(s_tokenA).transfer(to, amountOut);
+            amountIn = balanceB - reserveB;
+            uint256 amountInWithFee = (amountIn * 997) / 1000; // 扣除 0.3% 手续费
+            uint256 amountOutCalculated = (reserveA * amountInWithFee) /
+                (reserveB + amountInWithFee);
+            require(
+                amountOut <= amountOutCalculated,
+                "Insufficient output amount"
+            );
             _safeTransfer(s_tokenA, to, amountOut);
+            s_reserveA = reserveA - amountOut;
+            s_reserveB = reserveB + amountInWithFee;
         } else {
             revert DexPair__InvalidSwap();
         }
+
         emit SuccessfulSwap(to, amountOut);
-        _update();
         return amountOut;
     }
 
@@ -184,9 +203,9 @@ contract DexPair is ERC20, ReentrancyGuard {
     /**
      * @dev 更新储备量（应在每次流动性变化后调用）
      */
-    function _update() private {
-        s_reserveA = IERC20(s_tokenA).balanceOf(address(this));
-        s_reserveB = IERC20(s_tokenB).balanceOf(address(this));
+    function _update() private view {
+        // 可留空，或者添加检查逻辑
+        require(s_reserveA > 0 && s_reserveB > 0, "Invalid reserves");
     }
 
     /**
