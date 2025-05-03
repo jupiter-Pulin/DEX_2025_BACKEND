@@ -7,5 +7,5 @@ interface IWETH is IERC20 {
 
     function transfer(address to, uint value) external returns (bool);
 
-    function withdraw(uint, address) external;
+    function withdraw(uint) external;
 }

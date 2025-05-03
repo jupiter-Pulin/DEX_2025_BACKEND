@@ -30,7 +30,7 @@ contract ERC20Mock is ERC20 {
     }
 
     // 提取函数：将 WETH 转换为 ETH 并发送到指定地址
-    function withdraw(uint256 amount, address to) public {
+    function withdraw(uint256 amount) public {
         require(amount > 0, "Withdraw amount must be greater than 0");
         require(balanceOf(msg.sender) >= amount, "Insufficient WETH balance");
         require(
@@ -39,7 +39,7 @@ contract ERC20Mock is ERC20 {
         );
 
         _burn(msg.sender, amount); // 销毁调用者的 WETH
-        (bool success, ) = payable(to).call{value: amount}("");
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
         require(success, "ETH transfer failed");
         emit Withdrawal(msg.sender, amount);
     }

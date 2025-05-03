@@ -37,7 +37,7 @@ contract TestAddliquidity is Test {
         uint256 deadline = block.timestamp;
         vm.startPrank(user);
         ERC20Mock(weth).approve(address(router), 10 ether);
-        ERC20Mock(wbtc).approve(address(router), 10 ether);
+        ERC20Mock(wbtc).approve(address(router), 9 ether);
         uint256 liquidity = router.addLiquidity(
             amountADesired,
             amountBDesired,
@@ -58,6 +58,7 @@ contract TestAddliquidity is Test {
         vm.startPrank(user);
         ERC20Mock(weth).approve(address(router), 10 ether);
         ERC20Mock(wbtc).approve(address(router), 10 ether);
+        console.log("balance", ERC20Mock(weth).balanceOf(address(router)));
         uint256 liquidity = router.addLiquidityETH{value: 1 ether}({
             _amountBDesired: amountBDesired,
             _amountEthMin: amountAMin,
@@ -66,5 +67,6 @@ contract TestAddliquidity is Test {
             deadline: deadline
         });
         console.log("liquidity", liquidity);
+        console.log("balance", ERC20Mock(weth).balanceOf(address(router)));
     }
 }

@@ -195,39 +195,59 @@ contract DexRouter is ReentrancyGuard {
         nonReentrant
         returns (uint256 liquidity)
     {
-        // 首先需要将 ETH 转换为 WETH
+        // 将 ETH 转换为 WETH
         IWETH(i_weth).deposit{value: msg.value}();
 
-        //将weth和tokenB通过计算获得最佳输入金额，后传给pair合约
-        (address weth, address tokenB) = DexTotalLibraries.sortToken(
+        // 排序代币地址，确保 token0 < token1
+        (address token0, address token1) = DexTotalLibraries.sortToken(
             i_weth,
             _token
         );
-        (uint256 amountADesired, uint256 amountBDesired) = DexTotalLibraries
-            .sortAmount(msg.value, _amountBDesired, i_weth, weth);
-        (uint256 amountAMin, uint256 amountBMin) = DexTotalLibraries.sortAmount(
-            _amountEthMin,
-            _amountBMin,
-            i_weth,
-            weth
-        );
-        // 调用内部函数，传入排序后的代币地址
-        (uint256 amountA, uint256 amountB) = _addLiquidity(
-            amountADesired,
-            amountBDesired,
-            amountAMin,
-            amountBMin,
-            weth,
-            tokenB
-        );
-        address pair = DexFactory(i_factory).getPairAddress(weth, tokenB);
 
-        /* bool success 的判断在safeTransferFrom已经写了 */
-        DexTotalLibraries.safeTransferFrom(weth, msg.sender, pair, amountA);
-        DexTotalLibraries.safeTransferFrom(tokenB, msg.sender, pair, amountB);
-        // 调用内部函数，将流动性添加到池子中
+        // 根据 i_weth 的位置，分配期望数量和最小数量
+        (uint256 amount0Desired, uint256 amount1Desired) = i_weth == token0
+            ? (msg.value, _amountBDesired)
+            : (_amountBDesired, msg.value);
+
+        (uint256 amount0Min, uint256 amount1Min) = i_weth == token0
+            ? (_amountEthMin, _amountBMin)
+            : (_amountBMin, _amountEthMin);
+
+        // 调用 _addLiquidity 获取实际添加的代币数量
+        (uint256 amount0, uint256 amount1) = _addLiquidity(
+            amount0Desired,
+            amount1Desired,
+            amount0Min,
+            amount1Min,
+            token0,
+            token1
+        );
+
+        // 获取交易对地址
+        address pair = DexFactory(i_factory).getPairAddress(token0, token1);
+
+        // 根据代币顺序动态转账
+        if (token0 == i_weth) {
+            IERC20(i_weth).transfer(pair, amount0);
+            DexTotalLibraries.safeTransferFrom(
+                _token,
+                msg.sender,
+                pair,
+                amount1
+            );
+        } else {
+            IERC20(i_weth).transfer(pair, amount1);
+            DexTotalLibraries.safeTransferFrom(
+                _token,
+                msg.sender,
+                pair,
+                amount0
+            );
+        }
+
+        // 铸造流动性代币并返回
         liquidity = IDexPair(pair).mintShares(msg.sender);
-        emit LiquidityAdded(msg.sender, amountA, amountB, pair, liquidity);
+        emit LiquidityAdded(msg.sender, amount0, amount1, pair, liquidity);
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -308,7 +328,12 @@ contract DexRouter is ReentrancyGuard {
         (amountETH, amountToken) = token0 == i_weth
             ? (_amountA, _amountB)
             : (_amountB, _amountA);
-        IWETH(i_weth).withdraw(amountETH, to);
+        IWETH(i_weth).withdraw(amountETH);
+        (bool sent, ) = to.call{value: amountETH}("");
+        if (!sent) revert DEXRouter__TransferFailed();
+        require(sent, "ETH transfer failed");
+        //transfer amountToken
+        IERC20(_token).transfer(to, amountToken);
         emit LiquidityRemoved(to, amountETH, amountToken, latestLiquidity);
     }
 
@@ -321,7 +346,6 @@ contract DexRouter is ReentrancyGuard {
         address[] memory path
     ) private {
         address nextPair;
-
         //1.有amountIn，有amountOut，要让每一个地址都能正常的交换
         //先从两个地址开始算起
         //确定传入的是to还是传到下个pair地址合约
@@ -434,5 +458,13 @@ contract DexRouter is ReentrancyGuard {
         // 调用 DexTotalLibraries.getAmountsOut，传入 amountOutMin 为 0（仅查询，不检查最小值）
         amounts = DexTotalLibraries.getAmountsOut(path, amountIn, 0, i_factory);
         return amounts;
+    }
+
+    receive() external payable {
+        // This function enables the router to receive ETH
+    }
+
+    fallback() external payable {
+        // This function is a backup to receive ETH
     }
 }

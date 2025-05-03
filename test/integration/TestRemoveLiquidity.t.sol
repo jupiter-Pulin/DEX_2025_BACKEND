@@ -34,7 +34,8 @@ contract TestRemoveLiquidity is Test {
 
         (weth, wbtc, wsol) = config.getNetWorkConfig(); //get address
         router = new DexRouter(address(factory), weth);
-
+        vm.label({account: weth, newLabel: "weth"});
+        vm.label({account: wbtc, newLabel: "wbtc"});
         ERC20Mock(weth).mint(user, 10 ether);
         ERC20Mock(wbtc).mint(user, 10 ether);
 
@@ -117,10 +118,11 @@ contract TestRemoveLiquidity is Test {
      */
     function testRemoveLiquidityEth() public addLiquidityEth {
         //Arrange
-        uint256 beforBalanceA = ERC20Mock(weth).balanceOf(user);
         uint256 beforBalanceB = ERC20Mock(wbtc).balanceOf(user);
-        console.log("balanceA", beforBalanceA);
-        console.log("balanceB", beforBalanceB);
+
+        console.log("balance user wbtc", beforBalanceB);
+
+        console.log("balance user eth before", address(user).balance);
 
         address pair = factory.getPairAddress(weth, wbtc);
 
@@ -135,9 +137,10 @@ contract TestRemoveLiquidity is Test {
         });
 
         //Assert
-        uint256 afterBalanceA = ERC20Mock(weth).balanceOf(user) - 1e18;
         uint256 afterBalanceB = ERC20Mock(wbtc).balanceOf(user);
-        console.log("FINbalanceA", afterBalanceA);
-        console.log("FINbalanceB", afterBalanceB);
+
+        console.log("balance user eth after", address(user).balance);
+
+        console.log("FIN user balance wbtc", afterBalanceB);
     }
 }
